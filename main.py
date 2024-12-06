@@ -1,9 +1,10 @@
-import json
 import wx
 import re
+import json
 from os import walk
 from ctypes import windll
 from datetime import datetime
+from widget import CenteredStaticText
 from os.path import getmtime, join as path_join, expandvars
 
 GetSystemMetrics = windll.user32.GetSystemMetrics
@@ -68,7 +69,7 @@ class ContentJsonViewer(wx.Panel):
         self.top_sizer = wx.BoxSizer(wx.HORIZONTAL)
         self.back_btn = wx.Button(self, label="返回")
         self.forward_btn = wx.Button(self, label="前进")
-        self.content_dir_text = wx.StaticText(self, label="当前目录：")
+        self.content_dir_text = CenteredStaticText(self, label="当前目录：")
         self.content_dir_text.SetMinSize((MAX_SIZE[0], -1))
         self.top_sizer.Add(self.back_btn, proportion=0)
         self.top_sizer.Add(self.content_dir_text, flag=wx.EXPAND, proportion=1)
@@ -81,6 +82,20 @@ class ContentJsonViewer(wx.Panel):
 
         self.back_btn.Bind(wx.EVT_BUTTON, self.prev_content)
         self.forward_btn.Bind(wx.EVT_BUTTON, self.next_content)
+        self.content_dir_text.Bind(wx.EVT_LEFT_DOWN, self.popup_choose_menu)
+    
+    def popup_choose_menu(self, _):
+        if self.activate_exam_dir == "":
+            return
+        menu = wx.Menu()
+        for i, content_name in enumerate(self.content_names):
+            menu.Append(i, content_name)
+            menu.Bind(wx.EVT_MENU, self.switch_to_item, id=i)
+        self.content_dir_text.PopupMenu(menu)
+    
+    def switch_to_item(self, event: wx.MenuEvent):
+        self.content_index = event.GetId()
+        self.content_change()
 
     def next_content(self, *_):
         self.content_index += 1
@@ -129,7 +144,7 @@ class ContentJsonViewer(wx.Panel):
 
 class Viewer(wx.Frame):
     def __init__(self, parent: wx.Frame):
-        super().__init__(parent, title="content.json查看器", size=(820, 780))
+        super().__init__(parent, title="E听说content.json查看器", size=(820, 780))
         self.ts_parent_dir = ""
         self.sizer = wx.BoxSizer(wx.HORIZONTAL)
         self.ts_list = TSListView(self)
@@ -142,10 +157,16 @@ class Viewer(wx.Frame):
         self.open_menu = wx.Menu()
         self.open_menu.Append(0, "打开文件夹")
         self.open_menu.Append(1, "自动选择文件夹")
+        self.open_menu.Append(2, "刷新文件夹")
         self.open_menu.Bind(wx.EVT_MENU, self.load_choose_dir, id=0)
         self.open_menu.Bind(wx.EVT_MENU, self.load_default_dir, id=1)
+        self.open_menu.Bind(wx.EVT_MENU, self.reload, id=2)
         self.menu_bar.Append(self.open_menu, "操作")
         self.SetMenuBar(self.menu_bar)
+    
+    def reload(self, *_) -> None:
+        if self.ts_parent_dir:
+            self.load_dir(self.ts_parent_dir)
 
     def ts_dir_change(self, dir_name: str):
         dir_path = path_join(self.ts_parent_dir, dir_name)
