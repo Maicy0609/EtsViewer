@@ -4,7 +4,7 @@ import json
 from os import walk
 from ctypes import windll
 from datetime import datetime
-from widget import CenteredStaticText
+from widget import CenteredStaticText, ft
 from os.path import getmtime, join as path_join, expandvars
 
 GetSystemMetrics = windll.user32.GetSystemMetrics
@@ -20,18 +20,7 @@ class TSListView(wx.ListCtrl):
         self.InsertColumn(1, "更改时间", width=140)
         self.root_dir = ""
 
-        self.last_selected = None
-        self.timer = wx.Timer(self)
-        self.Bind(wx.EVT_TIMER, self.check_selection, self.timer)
         self.Bind(wx.EVT_LIST_ITEM_SELECTED, self.on_item_selected)
-        self.timer.Start(100)  # 每秒检查一次
-
-    def check_selection(self, *_):
-        if self.GetSelectedItemCount() == 1:
-            item = self.GetFirstSelected()
-            if item != self.last_selected and item != -1:
-                self.last_selected = item
-                viewer.ts_dir_change(self.GetItemText(item))
 
     def load_dir(self, dir_path: str):
         self.root_dir = dir_path
@@ -64,6 +53,7 @@ class ContentJsonViewer(wx.Panel):
         self.contents = []
         self.content_names = []
         self.content_index = 0
+        self.ctrl_down = False
         self.sizer = wx.BoxSizer(wx.VERTICAL)
 
         self.top_sizer = wx.BoxSizer(wx.HORIZONTAL)
@@ -80,10 +70,37 @@ class ContentJsonViewer(wx.Panel):
         self.sizer.Add(self.json_viewer, flag=wx.EXPAND, proportion=1)
         self.SetSizer(self.sizer)
 
+        self.font_size = self.json_viewer.GetFont().GetPointSize()
         self.back_btn.Bind(wx.EVT_BUTTON, self.prev_content)
         self.forward_btn.Bind(wx.EVT_BUTTON, self.next_content)
         self.content_dir_text.Bind(wx.EVT_LEFT_DOWN, self.popup_choose_menu)
-    
+        self.json_viewer.Bind(wx.EVT_KEY_DOWN, lambda e:self.on_key_down(e, True))
+        self.json_viewer.Bind(wx.EVT_KEY_UP, lambda e:self.on_key_down(e, False))
+        self.json_viewer.Bind(wx.EVT_MOUSEWHEEL, self.on_scroll)
+
+    def on_key_down(self, event: wx.KeyEvent, down_up: bool):
+        if event.GetKeyCode() == wx.WXK_CONTROL:
+            self.ctrl_down = down_up
+        if not down_up:
+            event.Skip()
+            return
+        elif event.GetKeyCode() == wx.WXK_LEFT and self.ctrl_down:
+            self.prev_content()
+        elif event.GetKeyCode() == wx.WXK_RIGHT and self.ctrl_down:
+            self.next_content()
+        else:
+            event.Skip()
+
+    def on_scroll(self, event: wx.MouseEvent):
+        if self.ctrl_down:
+            if event.GetWheelRotation() > 0:
+                self.font_size += 1
+            else:
+                self.font_size -= 1
+            print("当前字体大小:", self.font_size)
+            self.json_viewer.SetFont(ft(self.font_size))
+        event.Skip()
+
     def popup_choose_menu(self, _):
         if self.activate_exam_dir == "":
             return
@@ -91,8 +108,9 @@ class ContentJsonViewer(wx.Panel):
         for i, content_name in enumerate(self.content_names):
             menu.Append(i, content_name)
             menu.Bind(wx.EVT_MENU, self.switch_to_item, id=i)
+        menu.Enable(self.content_index, False)
         self.content_dir_text.PopupMenu(menu)
-    
+
     def switch_to_item(self, event: wx.MenuEvent):
         self.content_index = event.GetId()
         self.content_change()
@@ -122,21 +140,27 @@ class ContentJsonViewer(wx.Panel):
         self.content_dir_text.SetLabel(f"当前目录：{self.content_names[self.content_index]}")
         self.top_sizer.Layout()
         self.json_viewer.SetValue(json.dumps(self.contents[self.content_index], indent=4, ensure_ascii=False))
-        
 
     def init_data(self, dir_path: str):
         self.content_names.clear()
         self.contents.clear()
-        
+
         self.activate_exam_dir = dir_path
         walk_obj = walk(dir_path)
         _, dir_names, _ = next(walk_obj)
+        errors = []
         for dir_name in dir_names:
             if dir_name.startswith("content"):
-                self.content_names.append(dir_name)
                 with open(path_join(dir_path, dir_name, "content.json"), "r", encoding="utf-8") as content_text:
                     content_text = content_text.read()
-                self.contents.append(json.loads(content_text))
+                try:
+                    self.contents.append(json.loads(content_text))
+                    self.content_names.append(dir_name)
+                    print("找到试题:", dir_name)
+                except json.JSONDecodeError:
+                    errors.append(dir_name)
+        if errors:
+            wx.MessageBox(f"解析错误：{','.join(errors)}", "错误", wx.OK | wx.ICON_ERROR, parent=self)
 
         self.content_index = 0
         self.content_change()
@@ -158,17 +182,20 @@ class Viewer(wx.Frame):
         self.open_menu.Append(0, "打开文件夹")
         self.open_menu.Append(1, "自动选择文件夹")
         self.open_menu.Append(2, "刷新文件夹")
+        self.open_menu.Enable(2, False)
         self.open_menu.Bind(wx.EVT_MENU, self.load_choose_dir, id=0)
         self.open_menu.Bind(wx.EVT_MENU, self.load_default_dir, id=1)
         self.open_menu.Bind(wx.EVT_MENU, self.reload, id=2)
         self.menu_bar.Append(self.open_menu, "操作")
         self.SetMenuBar(self.menu_bar)
-    
+
     def reload(self, *_) -> None:
+        print("刷新文件夹")
         if self.ts_parent_dir:
             self.load_dir(self.ts_parent_dir)
 
     def ts_dir_change(self, dir_name: str):
+        print("选择作业:", dir_name)
         dir_path = path_join(self.ts_parent_dir, dir_name)
         self.content_json_viewer.init_data(dir_path)
 
@@ -189,6 +216,8 @@ class Viewer(wx.Frame):
                 self.load_dir(dir_dlg.GetPath())
 
     def load_dir(self, dir_path: str):
+        print("加载文件夹:", dir_path)
+        self.open_menu.Enable(2, True)
         self.ts_parent_dir = dir_path
         self.ts_list.load_dir(dir_path)
 
