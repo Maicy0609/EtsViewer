@@ -5,7 +5,7 @@ from os import walk
 from ctypes import windll
 from datetime import datetime
 from widget import CenteredStaticText, ft
-from os.path import getmtime, join as path_join, expandvars
+from os.path import getmtime, join as path_join, expandvars, isdir
 
 GetSystemMetrics = windll.user32.GetSystemMetrics
 MAX_SIZE = (GetSystemMetrics(0), GetSystemMetrics(1))
@@ -208,6 +208,11 @@ class Viewer(wx.Frame):
             if re.match(match_pattern, dir_name):
                 self.load_dir(path_join(roaming_dir, dir_name))
                 return
+        
+        if isdir(path_join(roaming_dir, "ETS")):
+            self.load_dir(path_join(roaming_dir, "ETS"))
+        else:
+            wx.MessageBox("未找到ETS文件夹", "错误", wx.OK | wx.ICON_ERROR, parent=self)
 
     def load_choose_dir(self, *_):
         with wx.DirDialog(self, "选择文件夹") as dir_dlg:
