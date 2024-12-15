@@ -27,7 +27,7 @@ class TSListView(wx.ListCtrl):
         walk_obj = walk(dir_path)
         _, dir_names, _ = next(walk_obj)
         self.DeleteAllItems()
-        full_number_pattern = re.compile(r"\d+")
+        full_number_pattern = re.compile(r".*\d+")
         for dir_name in dir_names:
             if not re.match(full_number_pattern, dir_name):
                 continue
