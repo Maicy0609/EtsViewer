@@ -46,6 +46,11 @@ set "CC=%ZIG%"
   main.py || goto :err
 
 if exist "build\EtsViewer" rmdir /s /q "build\EtsViewer"
+if exist "build\EtsViewer" (
+    echo ERROR: cannot remove build\EtsViewer
+    echo        Is EtsViewer.exe still running? Close it and retry.
+    goto :err
+)
 move "build\main.dist" "build\EtsViewer" >nul || goto :err
 
 echo [3/3] Compressing ...
