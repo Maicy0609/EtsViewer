@@ -110,13 +110,16 @@ def expected_fields(data: Any) -> list[str]:
             add((opt or {}).get(key) if isinstance(opt, dict) else opt)
 
     if st == "collector.role":
-        add(info.get("value"))
-        for q in info.get("question") or []:
+        questions = info.get("question") or []
+        # 对话原文默认不展示，只有完全没有题目时才回退显示
+        if not questions:
+            add(info.get("value"))
+        for q in questions:
             if not isinstance(q, dict):
                 continue
             ask = ref_clean(q.get("ask", ""))
             add(re.sub(r"ets_th\d+\s*", "", ask))
-            add(ref_clean(q.get("keywords", "")))
+            # 关键词按需求不再输出，故不计入期望值
             add(q.get("answer"))
             add(q.get("analyze"))
             add_options(q.get("std"))
@@ -139,9 +142,12 @@ def expected_fields(data: Any) -> list[str]:
                     add(opt.get("xx_nr"))
                     add(opt.get("xx_mc"))
     else:  # word / repeat_essay / repeat_dialogue
-        add(info.get("value"))
+        sublist = info.get("sublist") or []
+        # repeat_dialogue 有详细对话时不展示对话原文
+        if st != "collector.repeat_dialogue" or not sublist:
+            add(info.get("value"))
         add(info.get("translate"))
-        for item in info.get("sublist") or []:
+        for item in sublist:
             if isinstance(item, dict):
                 add(item.get("role"))
                 add(item.get("text"))
@@ -198,10 +204,10 @@ FIXTURES: list[tuple[str, dict[str, Any]]] = [
     ("choose-多题", {
         "structure_type": "collector.choose",
         "info": {"st_nr": "<p>阅读下面的材料，选择正确答案。</p>", "xtlist": [
-            {"xt_nr": "1. 文章的主旨是什么？", "answer": "B", "xxlist": [
+            {"xt_nr": "文章的主旨是什么？", "answer": "B", "xxlist": [
                 {"xx_mc": "A", "xx_nr": "介绍一种植物</br>"},
                 {"xx_mc": "B", "xx_nr": "说明环境保护的重要性</br>"}]},
-            {"xt_nr": "2. 作者的态度是？", "answer": "A", "xxlist": [
+            {"xt_nr": "作者的态度是？", "answer": "A", "xxlist": [
                 {"xx_mc": "A", "xx_nr": "支持"}]}]}}),
     ("choose-单题", {
         "structure_type": "collector.choose",

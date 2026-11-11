@@ -36,11 +36,6 @@ def _limited(options: list[Any], show_full_answers: bool) -> list[Any]:
     return options[:DEFAULT_ANSWER_LIMIT]
 
 
-def _hidden_hint(total: int) -> str:
-    """未显示答案时的提示文案"""
-    return f"... 还有{total - DEFAULT_ANSWER_LIMIT}个答案未显示（可勾选显示完整答案）"
-
-
 def format_question_json(json_data: Any, show_full_answers: bool = True) -> str:
     """根据题型选择对应的格式化函数"""
     if not isinstance(json_data, dict):
@@ -65,15 +60,18 @@ def format_question_json(json_data: Any, show_full_answers: bool = True) -> str:
 
 
 def format_role_type(json_data: dict[str, Any], show_full_answers: bool = True) -> str:
-    """格式化角色扮演题型"""
+    """格式化角色扮演题型
+
+    对话原文默认不展示——真正要看的是题目和答案。
+    只有整条记录没有任何题目时，才回退显示对话，避免出现空白。
+    """
     result: list[str] = []
     info = _as_dict(json_data.get("info"))
     questions = _as_list(info.get("question"))
 
-    if info.get("value"):
-        cleaned_dialog = clean_html_tags(info["value"])
+    if not questions and info.get("value"):
         result.append("==对话内容==")
-        result.append(cleaned_dialog)
+        result.append(clean_html_tags(info["value"]))
         result.append("")
 
     for idx, question in enumerate(questions, 1):
@@ -83,9 +81,6 @@ def format_role_type(json_data: dict[str, Any], show_full_answers: bool = True) 
         cleaned_ask = re.sub(r"ets_th\d+\s*", "", cleaned_ask)
         ask_text = cleaned_ask.strip()
         result.append(f"题目 {idx}：{ask_text}")
-
-        if question.get("keywords"):
-            result.append(f"关键词：{question['keywords']}")
 
         # answer / analyze 在本机题库里全为空，但字段确实存在，非空时不能丢
         if question.get("answer"):
@@ -100,8 +95,6 @@ def format_role_type(json_data: dict[str, Any], show_full_answers: bool = True) 
             for i, opt in enumerate(_limited(std_options, show_full_answers), 1):
                 cleaned_value = clean_html_tags(_as_dict(opt).get("value", ""))
                 result.append(f"{i}. {cleaned_value.strip()}")
-            if not show_full_answers and len(std_options) > DEFAULT_ANSWER_LIMIT:
-                result.append(_hidden_hint(len(std_options)))
             result.append("")
 
     return "\n".join(result)
@@ -147,9 +140,6 @@ def format_picture_type(json_data: dict[str, Any], show_full_answers: bool = Tru
             cleaned_answer = clean_html_tags(_as_dict(opt).get("value", ""))
             result.append(f"答案 {i}：")
             result.append(cleaned_answer)
-            result.append("")
-        if not show_full_answers and len(std_options) > DEFAULT_ANSWER_LIMIT:
-            result.append(_hidden_hint(len(std_options)))
             result.append("")
 
     if info.get("ref"):
@@ -274,17 +264,20 @@ def format_repeat_essay(json_data: dict[str, Any]) -> str:
 
 
 def format_repeat_dialogue(json_data: dict[str, Any]) -> str:
-    """格式化对话复述题型"""
+    """格式化对话复述题型
+
+    对话原文默认不展示（下面的「详细对话」已包含同样内容）；
+    只有没有详细对话时才回退显示原文。
+    """
     result: list[str] = []
     info = _as_dict(json_data.get("info"))
-    result.append("==对话内容==")
-    result.append("")
+    sublist = _as_list(info.get("sublist"))
 
-    if info.get("value"):
+    if not sublist and info.get("value"):
+        result.append("==对话内容==")
         result.append(clean_html_tags(info["value"]))
         result.append("")
 
-    sublist = _as_list(info.get("sublist"))
     if sublist:
         result.append("==详细对话==")
         for item in sublist:
